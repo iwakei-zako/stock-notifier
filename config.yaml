@@ -1,0 +1,147 @@
+# ==========================================================
+#  スクリーニング設定
+#  enabled: true/false で各項目の ON/OFF を切り替えられます。
+#  数値を変えれば条件の厳しさを調整できます。
+#  LINE には、ここに書いた順番で表示されます。
+# ==========================================================
+
+# --- 対象銘柄の絞り込み ---
+universe:
+  # 対象とする市場区分（JPX の上場銘柄一覧の「市場・商品区分」）
+  markets:
+    - プライム（内国株式）
+    - スタンダード（内国株式）
+    - グロース（内国株式）
+  min_price: 100              # 株価がこの値（円）未満の銘柄は除外
+  min_turnover: 100000000     # 直近20日平均の売買代金がこの値（円）未満は除外（1億円）
+                              # ※ 各条件に min_turnover を書くと、その条件だけ上書きできます
+
+# --- マーケット概況（メッセージの先頭に表示） ---
+market:
+  enabled: true
+  symbols:
+    - { symbol: "^N225",  label: "日経平均" }
+    - { symbol: "NIY=F",  label: "日経先物(CME)" }
+    - { symbol: "^DJI",   label: "NYダウ" }
+    - { symbol: "^GSPC",  label: "S&P500" }
+    - { symbol: "^IXIC",  label: "NASDAQ" }
+    - { symbol: "^SOX",   label: "SOX指数" }
+    - { symbol: "^VIX",   label: "VIX(恐怖指数)" }
+    - { symbol: "JPY=X",  label: "ドル円" }
+    - { symbol: "^TNX",   label: "米10年金利", diff: true }   # diff: 前日比を % ではなく差で表示
+
+# --- 銘柄の条件（どれか1つでも当てはまれば、その条件の欄に表示） ---
+conditions:
+  stop_high:
+    enabled: true
+    label: "ストップ高"
+    include_touch: true       # 引けでなくても、一時的にストップ高を付けた銘柄も含める
+    min_turnover: 0           # 小型株も対象にするため売買代金の下限なし
+    max_items: 20
+
+  stop_low:
+    enabled: true
+    label: "ストップ安"
+    include_touch: true
+    min_turnover: 0
+    max_items: 20
+
+  price_jump:
+    enabled: true
+    label: "急騰（前日比）"
+    threshold: 7              # 前日比（%）がこの値以上
+
+  price_drop:
+    enabled: true
+    label: "急落（前日比）"
+    threshold: -7             # 前日比（%）がこの値以下
+
+  price_jump_nd:
+    enabled: true
+    label: "急騰（5日間）"
+    days: 5
+    threshold: 20             # N日間の上昇率（%）がこの値以上
+
+  price_drop_nd:
+    enabled: true
+    label: "急落（5日間）"
+    days: 5
+    threshold: -20            # N日間の下落率（%）がこの値以下
+
+  volume_spike:
+    enabled: true
+    label: "出来高急増"
+    period: 20                # 過去N日の平均出来高と比較
+    ratio: 3.0                # 当日出来高が平均の何倍以上か
+
+  daytrade:
+    enabled: true
+    label: "デイトレ向き（値動き大＋売買活発）"
+    period: 14                # 値幅（ATR）を平均する日数
+    atr_pct: 5                # 1日の平均値幅が株価の何%以上か
+    min_turnover: 1000000000  # 売買代金 10億円以上（出入りしやすい銘柄に限る）
+
+  perfect_order:
+    enabled: true
+    label: "パーフェクトオーダー（新規）"
+    short: 5                  # 短期・中期・長期の移動平均（日）
+    mid: 25
+    long: 75
+    new_only: true            # true: その日に新しく形成した銘柄だけ / false: 形成中の銘柄すべて（件数が多くなります）
+
+  golden_cross:
+    enabled: true
+    label: "ゴールデンクロス"
+    short: 5
+    long: 25
+
+  dead_cross:
+    enabled: false
+    label: "デッドクロス"
+    short: 5
+    long: 25
+
+  rsi_oversold:
+    enabled: true
+    label: "RSI 売られすぎ"
+    period: 14
+    threshold: 30             # RSI がこの値以下
+
+  rsi_overbought:
+    enabled: false
+    label: "RSI 買われすぎ"
+    period: 14
+    threshold: 70             # RSI がこの値以上
+
+  ma_deviation_low:
+    enabled: false
+    label: "25日線から大きく下方乖離"
+    period: 25
+    threshold: -10            # 乖離率（%）がこの値以下
+
+  new_high_52w:
+    enabled: true
+    label: "52週高値更新"
+
+  new_low_52w:
+    enabled: false
+    label: "52週安値更新"
+
+# --- ニュース（TDnet の適時開示。メッセージの最後に表示） ---
+news:
+  enabled: true
+  from_time: "15:00"          # 前営業日のこの時刻以降の開示を対象にする（"00:00" で取引時間中の開示も含む）
+  max_items: 10               # 1カテゴリあたり最初に表示する件数（残りは「残りを表示」で開く）
+  exclude: ["訂正", "取得状況", "取得結果", "進捗状況", "終了に関する"]  # これを含む表題は除外
+  # 表題にキーワードを含む開示を、上から順に最初に当てはまったカテゴリに分類します
+  categories:
+    業績修正: ["上方修正", "下方修正", "業績予想の修正", "業績予想及び配当予想の修正", "差異に関する"]
+    配当・株主還元: ["増配", "配当予想の修正", "自己株式の取得", "株主優待"]
+    TOB・M&A: ["公開買付", "株式交換", "合併", "子会社化", "株式の取得", "買収"]
+    提携: ["業務提携", "資本提携", "資本業務提携"]
+    株式分割: ["株式分割"]
+    # 決算: ["決算短信"]   # 決算シーズンは1日数百件になるので初期設定ではオフ。使うなら先頭の # を消す
+
+# --- 通知の設定 ---
+notify:
+  max_per_condition: 10       # 1つの条件あたり最初に表示する件数（残りは「残りを表示」で開く。各条件の max_items で上書き可）
