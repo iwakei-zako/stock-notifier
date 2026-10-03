@@ -1,0 +1,75 @@
+name: 毎朝の株スクリーニング
+
+on:
+  schedule:
+    # 月〜金の 7:30（日本時間）に実行。cron は UTC なので前日 22:30 を指定。
+    # ※ GitHub の混雑状況により、数分〜数十分遅れることがあります。
+    - cron: "30 22 * * 0-4"
+  workflow_dispatch: # GitHub の画面から手動で実行するためのボタン
+
+permissions:
+  contents: write   # レポートをリポジトリ（docs フォルダ）に保存するため
+  pages: write      # GitHub Pages に公開するため
+  id-token: write
+
+concurrency:
+  group: daily-screening
+  cancel-in-progress: false
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: スクリーニングしてレポートを作成
+        run: python main.py
+
+      # 休場日の翌朝は line_message.json が作られないので、以降はすべてスキップされる
+      - name: レポートをリポジトリに保存（過去分を残すため）
+        if: hashFiles('line_message.json') != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git commit -m "レポート $(TZ=Asia/Tokyo date +%F)" || echo "変更なし"
+          git push
+
+      - name: GitHub Pages 用にまとめる
+        if: hashFiles('line_message.json') != ''
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+
+      - name: GitHub Pages に公開
+        if: hashFiles('line_message.json') != ''
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: LINE に送信
+        if: hashFiles('line_message.json') != ''
+        run: python main.py --send line_message.json --url "${{ steps.deploy.outputs.page_url }}"
+
+      - name: 失敗したことを LINE で知らせる
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sS -X POST https://api.line.me/v2/bot/message/push \
+            -H "Authorization: Bearer ${LINE_CHANNEL_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"⚠️ 株スクリーニングが失敗しました\\n詳細: ${RUN_URL}\"}]}"
